@@ -1,0 +1,54 @@
+{
+  "_what": "제안 원고 — 이미 존재하는 5개 lineage 간선에 붙일 lineageDetails(description / sqlQuery / source). 개체도 간선도 새로 만들지 않는다.",
+  "_why": "지금 간선을 클릭하면 EdgeInfoDrawer가 뜨는데 SQL 칸은 'No query available'이고 설명이 비어 있다. 관계가 어디서 왔는지, 이 목록이 무엇까지인지가 화면에 없다.",
+  "_where_it_renders": "components/Entity/EntityInfoDrawer/EdgeInfoDrawer.component.tsx:223~253 — description 영역, `label.sql-uppercase-query`(SchemaEditor), `label.lineage-source`(`LINEAGE_SOURCE[edgeEntity.source]`).",
+  "_not_applied": "아직 서버에 적용하지 않았다. 라이브 쓰기는 총괄이 baseline·read-back·복원 가능성을 확인한 뒤 처리한다.",
+
+  "_provenance_fact": "이 자료는 **AI가 실험용으로 작성해 API로 등록한 합성 관계**다. 자동 수집·추론의 결과가 아니고, 사람이 작성하거나 감수했다는 근거도 없다. Lineage Source의 `Manual`은 '자동 수집 경로가 아니라 API로 등록됨'이라는 뜻이며 작성자가 사람이라는 뜻이 아니다.",
+  "_execution_fact": "이 lab에는 DB 연결도, 파이프라인 실행도, 보고서 숫자도 없다. 개체와 관계만 등록된 catalog다. 따라서 어떤 문장도 '지금 실제로 다시 계산된다'로 읽히면 안 되고, '이 합성 설계대로 계산·갱신한다면 영향을 받는 대상'이라는 조건부여야 한다.",
+  "_shared_scope_line": "확인 범위: 이 그래프의 관계는 실험용으로 등록한 5개뿐이다. 여기 없는 관계는 '영향 없음'이 아니라 '미확인'이다.",
+
+  "edges": [
+    {
+      "from_type": "table", "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.orders",
+      "to_type": "pipeline", "to_fqn": "lab_synthetic_pipelines.build_net_revenue_daily",
+      "details": {
+        "source": "Manual",
+        "description": "주문 원장을 순매출 계산의 **총매출 입력**으로 삼는다고 등록한 관계다.\n\n출처: AI가 실험용으로 작성해 API로 등록한 합성 관계다. 자동 수집·추론의 결과가 아니며, 사람이 작성·감수했다는 근거도 없다. (Lineage Source의 `Manual`은 '자동 수집이 아니라 API 등록'이라는 뜻이지 작성자가 사람이라는 뜻이 아니다.)\n\n확인 범위: 이 그래프의 관계는 실험용으로 등록한 5개뿐이다. 여기 없는 관계는 '영향 없음'이 아니라 '미확인'이다."
+      }
+    },
+    {
+      "from_type": "table", "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.refunds",
+      "to_type": "pipeline", "to_fqn": "lab_synthetic_pipelines.build_net_revenue_daily",
+      "details": {
+        "source": "Manual",
+        "description": "환불 원장을 순매출의 **차감 입력**으로 삼는다고 등록한 관계다.\n\n영향의 뜻: **이 합성 설계대로 계산·갱신한다면** 환불 행의 변경은 아래 순매출 표와 그 보고서가 영향을 받는 대상이라는 의미다. 환불액을 원주문 날짜에 귀속시키는 설계라 과거 일자도 대상에 들어간다.\n지금 이 lab에서 실제로 다시 계산되는 것은 없다 — DB 연결도, 파이프라인 실행도, 보고서 숫자도 없는 catalog 항목이다.\n\n출처: AI가 실험용으로 작성해 API로 등록한 합성 관계다. 자동 수집·추론의 결과가 아니며 사람의 감수 근거도 없다.\n확인 범위: 등록한 5개 관계뿐이다. 여기 없는 관계는 '영향 없음'이 아니라 '미확인'이다."
+      }
+    },
+    {
+      "from_type": "pipeline", "from_fqn": "lab_synthetic_pipelines.build_net_revenue_daily",
+      "to_type": "table", "to_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily",
+      "details": {
+        "source": "Manual",
+        "description": "환불을 주문 단위로 **먼저 합산한 뒤** 주문과 1:1로 결합해 일별 순매출을 만든다고 설계한 관계다.\n\n오른쪽 SQL이 그 설계식이다. 그냥 조인하면 환불 건수만큼 주문 금액이 중복 계산된다 — 주문 100 하나에 환불 20·10이면 170이 나오고, 이 설계에서 의도한 값은 **70**이다.\n이 숫자는 **확인한 합성 SQL 예시**일 뿐이고, 자동 재계산이 일어난다는 근거도 실제 회계의 환불 인식 규칙도 아니다. 이 파이프라인은 실행되지 않는 catalog 항목이다.\n\n출처: AI가 실험용으로 작성해 API로 등록한 합성 관계다. 확인 범위: 등록한 5개 관계뿐이다.",
+        "sqlQuery": "WITH refunds_per_order AS (SELECT order_id, SUM(refund_amount) AS refund_amount FROM refunds GROUP BY order_id) SELECT CAST(o.order_ts AS DATE) AS day, SUM(o.gross_amount) AS gross_amount, COALESCE(SUM(r.refund_amount), 0) AS refund_amount, SUM(o.gross_amount) - COALESCE(SUM(r.refund_amount), 0) AS net_revenue FROM orders o LEFT JOIN refunds_per_order r ON r.order_id = o.order_id GROUP BY CAST(o.order_ts AS DATE)"
+      }
+    },
+    {
+      "from_type": "table", "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily",
+      "to_type": "dashboard", "to_fqn": "lab_synthetic_dashboards.finance_exec_daily",
+      "details": {
+        "source": "Manual",
+        "description": "경영 일간 보고서가 이 표를 읽는다고 등록한 관계다.\n\n영향의 뜻: **이 합성 설계대로 계산·갱신한다면** 앞의 변경이 이 보고서까지 닿는 대상이라는 의미다.\n이 보고서는 합성 catalog 항목이라 실제 차트도 숫자도 없고, 지금 갱신되는 값도 없다. 화면에서 확인되는 것은 '연결이 여기까지 이어진다'까지다.\n\n출처: AI가 실험용으로 작성해 API로 등록한 합성 관계다. 자동 수집·추론이 아니다.\n확인 범위: 등록한 5개 관계뿐이다. 여기 없는 보고서가 안전하다는 뜻은 아니라 '미확인'이라는 뜻이다."
+      }
+    },
+    {
+      "from_type": "table", "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily",
+      "to_type": "metric", "to_fqn": "lab_net_revenue",
+      "details": {
+        "source": "Manual",
+        "description": "지표 '순매출'이 이 표에서 나온다고 등록한 관계다. 지표 화면에서 **원천 표로 거슬러 올라가** 정의가 어떤 자료에 기대고 있는지 볼 수 있게 해 준다.\n\n출처: AI가 실험용으로 작성해 API로 등록한 합성 관계다. 제품이 지표와 표의 관계를 자동으로 추론한 것이 아니다.\n확인 범위: 등록한 5개 관계뿐이다. 여기 없는 관계는 '영향 없음'이 아니라 '미확인'이다."
+      }
+    }
+  ]
+}

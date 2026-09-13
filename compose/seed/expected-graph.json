@@ -1,0 +1,181 @@
+{
+  "_purpose": "Independent expected values for the first scene. Hand-written from the scene definition in README.md, NOT generated from the seed script's own output. seed_first_scene.py reads this file and compares the SERVER's read-back against it. If this file and the script ever disagree, the script is wrong.",
+  "_scene": "분석가가 순매출의 정의·담당자·원본을 찾고, 환불 데이터 변경이 어떤 보고서에 영향을 주는지 확인한다.",
+  "_namespace_rule": "Every name/FQN below starts with 'lab_'. The script refuses to write to anything outside this prefix, never issues DELETE, and never touches pre-existing non-lab entities.",
+
+  "namespace_prefix": "lab_",
+
+  "net_revenue_semantics": {
+    "_written_first": "이 숫자를 먼저 정하고 그 다음에 SQL을 맞췄다. SQL이 이 값과 어긋나면 SQL이 틀린 것이다.",
+    "worked_example": {
+      "orders": [
+        { "order_id": 1, "order_ts": "2026-09-01T10:00:00", "gross_amount": 100 }
+      ],
+      "refunds": [
+        { "refund_id": 1, "order_id": 1, "refund_ts": "2026-09-03T09:00:00", "refund_amount": 20 },
+        { "refund_id": 2, "order_id": 1, "refund_ts": "2026-09-04T09:00:00", "refund_amount": 10 }
+      ],
+      "expected_net_revenue_daily": [
+        { "day": "2026-09-01", "gross_amount": 100, "refund_amount": 30, "net_revenue": 70 }
+      ],
+      "expected_net_revenue": 70
+    },
+    "naive_join_bug_this_avoids": {
+      "what": "orders 와 refunds 를 order_id 로 바로 LEFT JOIN 하면 환불 2건 때문에 주문 행이 2배로 늘어난다.",
+      "wrong_result": "SUM(gross_amount)=200, net_revenue=170",
+      "fix": "환불을 order_id 단위로 **먼저 집계**한 뒤 1:1 로 조인한다."
+    },
+    "date_field": {
+      "fact": "orders 에는 `day` 컬럼이 없다. 정의된 날짜 필드는 `order_ts` 뿐이다.",
+      "rule": "day = CAST(order_ts AS DATE)"
+    },
+    "refund_attribution_choice": {
+      "choice": "환불액을 **환불이 일어난 날이 아니라 원주문의 날짜**에 귀속시킨다.",
+      "consequence": "환불 데이터가 바뀌면 과거 일자의 순매출이 바뀐다. 그래서 이 장면의 '변경 영향'이 성립한다.",
+      "scope": "이건 **이 합성 사례에서 고른 규칙일 뿐**이다. 실제 회계의 환불 인식 규칙으로 일반화하지 않는다. 다른 조직은 환불일 귀속을 쓸 수 있다."
+    }
+  },
+
+  "entities": [
+    {
+      "step": "원천 서비스 (합성)",
+      "type": "databaseService",
+      "fqn": "lab_synthetic_db",
+      "expect": { "serviceType": "CustomDatabase", "connection_absent": true, "_connection_absent_is_checked": true },
+      "_note": "CustomDatabase is used deliberately so the service needs no connection block and therefore no credential of any kind."
+    },
+    { "step": "원천 DB", "type": "database", "fqn": "lab_synthetic_db.lab_commerce", "expect": {} },
+    { "step": "원천 스키마", "type": "databaseSchema", "fqn": "lab_synthetic_db.lab_commerce.lab_sales", "expect": {} },
+
+    {
+      "step": "원천 테이블 (총매출)",
+      "type": "table",
+      "fqn": "lab_synthetic_db.lab_commerce.lab_sales.orders",
+      "expect": { "columns": ["order_id", "order_ts", "customer_id", "gross_amount"] }
+    },
+    {
+      "step": "원천 테이블 (환불) — 변경 영향의 출발점",
+      "type": "table",
+      "fqn": "lab_synthetic_db.lab_commerce.lab_sales.refunds",
+      "expect": { "columns": ["refund_id", "order_id", "refund_ts", "refund_amount"] }
+    },
+    {
+      "step": "파생 테이블 (순매출 일별)",
+      "type": "table",
+      "fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily",
+      "expect": { "columns": ["day", "gross_amount", "refund_amount", "net_revenue"] }
+    },
+
+    { "step": "파이프라인 서비스", "type": "pipelineService", "fqn": "lab_synthetic_pipelines", "expect": { "serviceType": "CustomPipeline", "connection_absent": true } },
+    {
+      "step": "파이프라인 (orders+refunds → net_revenue_daily)",
+      "type": "pipeline",
+      "fqn": "lab_synthetic_pipelines.build_net_revenue_daily",
+      "expect": {}
+    },
+
+    { "step": "대시보드 서비스", "type": "dashboardService", "fqn": "lab_synthetic_dashboards", "expect": { "serviceType": "CustomDashboard", "connection_absent": true } },
+    {
+      "step": "대시보드 (영향받는 보고서)",
+      "type": "dashboard",
+      "fqn": "lab_synthetic_dashboards.finance_exec_daily",
+      "expect": {}
+    },
+
+    { "step": "용어집", "type": "glossary", "fqn": "lab_business_metrics", "expect": {} },
+    {
+      "step": "용어: 순매출 정의",
+      "type": "glossaryTerm",
+      "fqn": "lab_business_metrics.net_revenue",
+      "expect": {
+        "description_contains": "환불",
+        "synonyms": ["net_sales", "순매출"]
+      }
+    },
+    {
+      "step": "지표: 순매출 (정의·소유자·원천의 중심)",
+      "type": "metric",
+      "fqn": "lab_net_revenue",
+      "expect": {
+        "metricType": "DERIVED",
+        "unitOfMeasurement": "DOLLARS",
+        "granularity": "DAY",
+        "metricExpression_language": "SQL",
+        "metricExpression_contains": "refund_amount",
+        "metricExpression_must_not_contain": ["o.day", "orders.day"],
+        "owners_include_name": "admin",
+        "assets_contains_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily"
+      },
+      "_note": "owners is checked by EXACT identity (name must equal owners_include_name), not merely 'some owner exists' — an arbitrary different owner must NOT pass. If no principal resolves at all, the result is UNVERIFIED: never 'no owner', never a pass.",
+      "_assets_note": "metric→asset is written as an APPLIED_TO edge by MetricRepository.storeRelationships (MetricRepository.java:219-222), so it is set in the same PUT /v1/metrics as the metric itself. Read back with ?fields=owners,assets."
+    }
+  ],
+
+  "lineage_edges": [
+    { "from_type": "table",    "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.orders",  "to_type": "pipeline",  "to_fqn": "lab_synthetic_pipelines.build_net_revenue_daily" },
+    { "from_type": "table",    "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.refunds", "to_type": "pipeline",  "to_fqn": "lab_synthetic_pipelines.build_net_revenue_daily" },
+    { "from_type": "pipeline", "from_fqn": "lab_synthetic_pipelines.build_net_revenue_daily", "to_type": "table",     "to_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily" },
+    { "from_type": "table",    "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily", "to_type": "dashboard", "to_fqn": "lab_synthetic_dashboards.finance_exec_daily" },
+
+    {
+      "from_type": "table", "from_fqn": "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily",
+      "to_type": "metric",  "to_fqn": "lab_net_revenue",
+      "_added_by": "synthetic metric lineage fixture",
+      "_why": "metric.assets(APPLIED_TO)는 저장은 되지만 이 revision의 Metric 화면 어디에서도 읽히지 않는다. Metric Lineage 탭은 generic EntityLineageTab(entityType=METRIC)이라 lineage 간선만 본다. 그래서 지표에서 원천으로 따라가려면 이 간선이 필요하다.",
+      "_direction": "table 이 from(upstream), metric 이 to(downstream). entityLineage.json 이 fromEntity='upstream', toEntity='downstream'으로 정의하므로, 지표 화면에서 net_revenue_daily 가 **상류(원천)** 로 보인다. 지표가 그 테이블에 의존한다는 합성 정의다.",
+      "_meaning_is_synthetic": "이건 우리가 선언한 합성 관계다. 제품이 지표↔테이블 의존을 자동 추론한 게 아니다."
+    }
+  ],
+
+  "_edge_verification_method": "각 간선은 GET /v1/lineage/getLineageEdge/{fromEntity}/name/{fromFQN}/{toEntity}/name/{toFQN} 로 **하나씩 독립 확인**한다(200=있음, 404=없음). 한 노드 기준 그래프 한 장으로 형제 간선까지 봤다고 주장하지 않는다 — refunds 관점 그래프에는 orders→pipeline 간선이 안 나올 수 있다.",
+
+  "scene_assertions": [
+    {
+      "id": "definition_and_owner",
+      "question": "순매출의 정의와 담당자를 열 수 있는가",
+      "requires_entity_checks": ["lab_net_revenue"],
+      "requires": ["metricExpression_language", "metricExpression_contains", "owners_include_name"],
+      "if_unresolvable": "UNVERIFIED"
+    },
+    {
+      "id": "metric_to_source",
+      "question": "지표 화면(정의·담당자)에서 원천 테이블로 따라갈 수 있는가",
+      "requires_edges": [
+        ["table", "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily", "metric", "lab_net_revenue"]
+      ],
+      "_note": "이 간선이 없으면 Metric Lineage 탭에 metric 노드 하나만 남는다(실측됨). assets 만으로는 성립하지 않는다."
+    },
+    {
+      "id": "source_upstream",
+      "question": "순매출의 원본까지 거슬러 갈 수 있는가",
+      "requires_edges": [
+        ["table", "lab_synthetic_db.lab_commerce.lab_sales.orders", "pipeline", "lab_synthetic_pipelines.build_net_revenue_daily"],
+        ["table", "lab_synthetic_db.lab_commerce.lab_sales.refunds", "pipeline", "lab_synthetic_pipelines.build_net_revenue_daily"],
+        ["pipeline", "lab_synthetic_pipelines.build_net_revenue_daily", "table", "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily"]
+      ],
+      "_note": "orders 간선과 refunds 간선을 **각각** 확인해야 성립한다. 한쪽만 보고 '원천 확인'이라고 하지 않는다."
+    },
+    {
+      "id": "impact_downstream",
+      "question": "환불 데이터 변경이 어떤 보고서에 영향을 주는가",
+      "requires_edges": [
+        ["table", "lab_synthetic_db.lab_commerce.lab_sales.refunds", "pipeline", "lab_synthetic_pipelines.build_net_revenue_daily"],
+        ["pipeline", "lab_synthetic_pipelines.build_net_revenue_daily", "table", "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily"],
+        ["table", "lab_synthetic_db.lab_commerce.lab_sales.net_revenue_daily", "dashboard", "lab_synthetic_dashboards.finance_exec_daily"]
+      ],
+      "_note": "장면의 핵심. 한 hop이라도 없으면 그 hop을 UNVERIFIED로 적는다. 간선이 없다고 '영향 없음'으로 결론내지 않는다."
+    }
+  ],
+
+  "exit_codes": {
+    "0": "모두 MATCH",
+    "1": "MISMATCH 있음 (기대와 다른 값이 실제로 관측됨)",
+    "2": "MISMATCH 는 없지만 UNVERIFIED 있음 — 성공 아님, 확인 못 한 것이 남았다는 뜻"
+  },
+
+  "_non_assertions": [
+    "이 fixture는 우리가 만든 합성 자료다. 원본 제품이 기본 제공하는 자료가 아니다.",
+    "여기서 확인되는 것은 '우리가 넣은 관계를 제품이 그대로 읽어 주는가'까지다. 권한·수집 갱신·이름 변경의 보장은 여기서 주장하지 않는다.",
+    "그래프에 없는 관계는 '영향 없음'이 아니라 '미확인'이다."
+  ]
+}
