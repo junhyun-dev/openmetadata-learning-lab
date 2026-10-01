@@ -1,5 +1,7 @@
 # OpenMetadata Learning Lab
 
+> **보관(2026-10-01).** 이 저장소는 더 고치지 않습니다. 코드와 기록은 그대로 열어 볼 수 있습니다. 지금 진행 중인 프로젝트는 [쇼핑 플랫폼](https://github.com/junhyun-dev/shopping-data-platform)입니다.
+
 OpenMetadata에서 지표의 정의·소유자·원천과 데이터 간 관계를 살펴보는 합성 메타데이터 실험입니다.
 OpenMetadata 자체를 만든 프로젝트가 아니라, 기존 제품 위에 합성 자료를 등록하고 저장 결과를 대조하는 Python 도구입니다.
 
